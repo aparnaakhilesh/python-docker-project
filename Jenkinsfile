@@ -2,49 +2,68 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME     = "aparnaakhilesh/python-docker-project"
-        IMAGE_TAG      = "latest"
+        DOCKERHUB_USER = "aparnaakhilesh"
+        IMAGE_NAME = "python-cicd-app"
         CONTAINER_NAME = "python-app"
-        APP_PORT       = "5000"
+        DOCKER_CREDS = credentials('dockerhub-creds')
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage("Checkout Code") {
             steps {
-                git url: 'https://github.com/aparnaakhilesh/python-docker-project.git'
+                git branch: 'main',
+                    url: 'https://github.com/aparnaakhilesh/python-docker-project.git'
             }
         }
 
-        stage('Build Image') {
+        stage("Build Docker Image") {
             steps {
-                sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
+                sh """
+                docker build -t $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER .
+                """
             }
         }
 
-        stage('Push Image') {
+        stage("Login to Docker Hub") {
             steps {
-                sh 'docker push ${IMAGE_NAME}:${IMAGE_TAG}'
+                sh """
+                echo $DOCKER_CREDS_PSW | docker login -u $DOCKER_CREDS_USR --password-stdin
+                """
             }
         }
 
-        stage('Cleanup Old Container') {
+        stage("Push Docker Image") {
             steps {
-                sh '''
-                  docker rm -f ${CONTAINER_NAME} || true
-                '''
+                sh """
+                docker push $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER
+                docker tag $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER $DOCKERHUB_USER/$IMAGE_NAME:latest
+                docker push $DOCKERHUB_USER/$IMAGE_NAME:latest
+                """
             }
         }
 
-        stage('Run Container') {
+        stage("Run Container") {
             steps {
-                sh '''
-                  docker run -d \
-                    --name ${CONTAINER_NAME} \
-                    -p ${APP_PORT}:${APP_PORT} \
-                    ${IMAGE_NAME}:${IMAGE_TAG}
-                '''
+                sh """
+                docker stop $CONTAINER_NAME || true
+                docker rm $CONTAINER_NAME || true
+
+                docker run -d \
+                --name $CONTAINER_NAME \
+                -p 5000:5000 \
+                $DOCKERHUB_USER/$IMAGE_NAME:latest
+                """
             }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ CI/CD Pipeline completed successfully!"
+        }
+        failure {
+            echo "❌ Pipeline failed"
         }
     }
 }
