@@ -37,8 +37,6 @@ pipeline {
             steps {
                 sh """
                 docker push $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER
-                docker tag $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER $DOCKERHUB_USER/$IMAGE_NAME:latest
-                docker push $DOCKERHUB_USER/$IMAGE_NAME:latest
                 """
             }
         }
@@ -53,7 +51,6 @@ pipeline {
 
                     echo "Keeping builds: ${KEEP1}, ${KEEP2}, ${KEEP3}"
 
-                    // read image tags from docker
                     def allTags = sh(
                         script: "docker images ${DOCKERHUB_USER}/${IMAGE_NAME} --format '{{.Tag}}'",
                         returnStdout: true
@@ -61,20 +58,17 @@ pipeline {
 
                     for (tag in allTags) {
 
-                        
                         if (tag != KEEP1.toString() &&
                             tag != KEEP2.toString() &&
                             tag != KEEP3.toString()) {
 
                             echo "Removing old tag: ${tag}"
 
-                            // Stop any container using this tag
                             sh """
                             docker ps -a --filter ancestor=${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} -q | xargs -r docker stop
                             docker ps -a --filter ancestor=${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} -q | xargs -r docker rm
                             """
 
-                            // Remove old image
                             sh "docker rmi -f ${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} || true"
                         }
                     }
@@ -91,7 +85,7 @@ pipeline {
                 docker run -d \
                 --name $CONTAINER_NAME \
                 -p 5000:5000 \
-                $DOCKERHUB_USER/$IMAGE_NAME:latest
+                $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER
                 """
             }
         }
