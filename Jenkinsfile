@@ -61,8 +61,7 @@ pipeline {
 
                     for (tag in allTags) {
 
-                        if (tag == "latest") continue
-
+                        
                         if (tag != KEEP1.toString() &&
                             tag != KEEP2.toString() &&
                             tag != KEEP3.toString()) {
