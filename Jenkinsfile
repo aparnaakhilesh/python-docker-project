@@ -12,37 +12,31 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/aparnaakhilesh/python-docker-project.git'
+                git url: 'https://github.com/aparnaakhilesh/python-docker-project.git'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build Image') {
+            steps {
+                sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                sh 'docker push ${IMAGE_NAME}:${IMAGE_TAG}'
+            }
+        }
+
+        stage('Cleanup Old Container') {
             steps {
                 sh '''
-                  docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                  docker rm -f ${CONTAINER_NAME} || true
                 '''
             }
         }
 
-        stage('Push Docker Image') {
-            steps {
-                sh '''
-                  docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                '''
-            }
-        }
-
-        stage('Stop & Remove Old Container') {
-            steps {
-                sh '''
-                  docker stop ${CONTAINER_NAME} || true
-                  docker rm ${CONTAINER_NAME} || true
-                '''
-            }
-        }
-
-        stage('Run New Container') {
+        stage('Run Container') {
             steps {
                 sh '''
                   docker run -d \
@@ -53,13 +47,5 @@ pipeline {
             }
         }
     }
-
-    post {
-        success {
-            echo "✅ Build, push, and run completed successfully"
-        }
-        failure {
-            echo "❌ Pipeline failed"
-        }
-    }
 }
+``
