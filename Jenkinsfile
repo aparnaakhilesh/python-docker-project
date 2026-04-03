@@ -49,8 +49,8 @@ pipeline {
                 echo "Keeping only last 3 builds..."
 
                 KEEP1=$BUILD_NUMBER
-                KEEP2=$(($BUILD_NUMBER - 1))
-                KEEP3=$(($BUILD_NUMBER - 2))
+                KEEP2=$((BUILD_NUMBER - 1))
+                KEEP3=$((BUILD_NUMBER - 2))
 
                 echo "Keeping tags: \$KEEP1, \$KEEP2, \$KEEP3"
 
