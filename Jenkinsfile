@@ -45,32 +45,41 @@ pipeline {
 
         stage("Cleanup old images and containers") {
             steps {
-                sh """
-                echo "Keeping only last 3 builds..."
+                script {
 
-                def KEEP1 = BUILD_NUMBER.toInteger()
-                def KEEP2 = KEEP1 - 1
-                def KEEP3 = KEEP1 - 2
+                    def KEEP1 = BUILD_NUMBER.toInteger()
+                    def KEEP2 = KEEP1 - 1
+                    def KEEP3 = KEEP1 - 2
 
-                echo "Keeping tags: \$KEEP1, \$KEEP2, \$KEEP3"
+                    echo "Keeping builds: ${KEEP1}, ${KEEP2}, ${KEEP3}"
 
-                # Loop through all image tags
-                for TAG in \$(docker images $DOCKERHUB_USER/$IMAGE_NAME --format "{{.Tag}}"); do
+                    // read image tags from docker
+                    def allTags = sh(
+                        script: "docker images ${DOCKERHUB_USER}/${IMAGE_NAME} --format '{{.Tag}}'",
+                        returnStdout: true
+                    ).trim().split("\n")
 
-                    # Skip the tags we must keep
-                    if [ "\$TAG" != "\$KEEP1" ] && [ "\$TAG" != "\$KEEP2" ] && [ "\$TAG" != "\$KEEP3" ] && [ "\$TAG" != "latest" ]; then
+                    for (tag in allTags) {
 
-                        echo "Deleting old image and containers with tag: \$TAG"
+                        if (tag == "latest") continue
 
-                        # Stop any running container using this old image
-                        docker ps -a --filter ancestor=$DOCKERHUB_USER/$IMAGE_NAME:\$TAG -q | xargs -r docker stop
-                        docker ps -a --filter ancestor=$DOCKERHUB_USER/$IMAGE_NAME:\$TAG -q | xargs -r docker rm
+                        if (tag != KEEP1.toString() &&
+                            tag != KEEP2.toString() &&
+                            tag != KEEP3.toString()) {
 
-                        # Delete old image
-                        docker rmi -f $DOCKERHUB_USER/$IMAGE_NAME:\$TAG || true
-                    fi
-                done
-                """
+                            echo "Removing old tag: ${tag}"
+
+                            // Stop any container using this tag
+                            sh """
+                            docker ps -a --filter ancestor=${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} -q | xargs -r docker stop
+                            docker ps -a --filter ancestor=${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} -q | xargs -r docker rm
+                            """
+
+                            // Remove old image
+                            sh "docker rmi -f ${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} || true"
+                        }
+                    }
+                }
             }
         }
 
