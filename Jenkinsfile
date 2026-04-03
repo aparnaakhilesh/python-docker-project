@@ -48,9 +48,9 @@ pipeline {
                 sh """
                 echo "Keeping only last 3 builds..."
 
-                KEEP1=$BUILD_NUMBER
-                KEEP2=$((BUILD_NUMBER - 1))
-                KEEP3=$((BUILD_NUMBER - 2))
+                def KEEP1 = BUILD_NUMBER.toInteger()
+                def KEEP2 = KEEP1 - 1
+                def KEEP3 = KEEP1 - 2
 
                 echo "Keeping tags: \$KEEP1, \$KEEP2, \$KEEP3"
 
