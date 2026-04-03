@@ -43,6 +43,37 @@ pipeline {
             }
         }
 
+        stage("Cleanup old images and containers") {
+            steps {
+                sh """
+                echo "Keeping only last 3 builds..."
+
+                KEEP1=$BUILD_NUMBER
+                KEEP2=$(($BUILD_NUMBER - 1))
+                KEEP3=$(($BUILD_NUMBER - 2))
+
+                echo "Keeping tags: \$KEEP1, \$KEEP2, \$KEEP3"
+
+                # Loop through all image tags
+                for TAG in \$(docker images $DOCKERHUB_USER/$IMAGE_NAME --format "{{.Tag}}"); do
+
+                    # Skip the tags we must keep
+                    if [ "\$TAG" != "\$KEEP1" ] && [ "\$TAG" != "\$KEEP2" ] && [ "\$TAG" != "\$KEEP3" ] && [ "\$TAG" != "latest" ]; then
+
+                        echo "Deleting old image and containers with tag: \$TAG"
+
+                        # Stop any running container using this old image
+                        docker ps -a --filter ancestor=$DOCKERHUB_USER/$IMAGE_NAME:\$TAG -q | xargs -r docker stop
+                        docker ps -a --filter ancestor=$DOCKERHUB_USER/$IMAGE_NAME:\$TAG -q | xargs -r docker rm
+
+                        # Delete old image
+                        docker rmi -f $DOCKERHUB_USER/$IMAGE_NAME:\$TAG || true
+                    fi
+                done
+                """
+            }
+        }
+
         stage("Run Container") {
             steps {
                 sh """
@@ -60,10 +91,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ CI/CD Pipeline completed successfully!"
+            echo "CI/CD Pipeline completed successfully!"
         }
         failure {
-            echo "❌ Pipeline failed"
+            echo "Pipeline failed"
         }
     }
 }
