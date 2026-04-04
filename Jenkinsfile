@@ -37,42 +37,9 @@ pipeline {
             steps {
                 sh """
                 docker push $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER
+                docker tag $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER $DOCKERHUB_USER/$IMAGE_NAME:latest
+                docker push $DOCKERHUB_USER/$IMAGE_NAME:latest
                 """
-            }
-        }
-
-        stage("Cleanup old images and containers") {
-            steps {
-                script {
-
-                    def KEEP1 = BUILD_NUMBER.toInteger()
-                    def KEEP2 = KEEP1 - 1
-                    def KEEP3 = KEEP1 - 2
-
-                    echo "Keeping builds: ${KEEP1}, ${KEEP2}, ${KEEP3}"
-
-                    def allTags = sh(
-                        script: "docker images ${DOCKERHUB_USER}/${IMAGE_NAME} --format '{{.Tag}}'",
-                        returnStdout: true
-                    ).trim().split("\n")
-
-                    for (tag in allTags) {
-
-                        if (tag != KEEP1.toString() &&
-                            tag != KEEP2.toString() &&
-                            tag != KEEP3.toString()) {
-
-                            echo "Removing old tag: ${tag}"
-
-                            sh """
-                            docker ps -a --filter ancestor=${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} -q | xargs -r docker stop
-                            docker ps -a --filter ancestor=${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} -q | xargs -r docker rm
-                            """
-
-                            sh "docker rmi -f ${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} || true"
-                        }
-                    }
-                }
             }
         }
 
@@ -85,7 +52,7 @@ pipeline {
                 docker run -d \
                 --name $CONTAINER_NAME \
                 -p 5000:5000 \
-                $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER
+                $DOCKERHUB_USER/$IMAGE_NAME:latest
                 """
             }
         }
@@ -93,10 +60,10 @@ pipeline {
 
     post {
         success {
-            echo "CI/CD Pipeline completed successfully!"
+            echo " CI/CD Pipeline completed successfully!"
         }
         failure {
-            echo "Pipeline failed"
+            echo " Pipeline failed"
         }
     }
 }
