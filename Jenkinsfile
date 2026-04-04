@@ -78,7 +78,7 @@ pipeline {
 
                             sh """
                             curl -s -X DELETE -u ${DOCKERHUB_USER}:${DOCKER_CREDS_PSW} \
-                            https://hub.docker.com/v2/namespaces/${DOCKERHUB_USER}/repositories/${IMAGE_NAME}/tags/${tag}/
+                            https://hub.docker.com/v2/repositories/${DOCKERHUB_USER}/${IMAGE_NAME}/tags/${tag}/
                             """
                         }
                     }
