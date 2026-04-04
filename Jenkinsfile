@@ -86,6 +86,68 @@ pipeline {
                 }
             }
         }
+        
+        stage('Cleanup Docker Hub old tags') {
+    steps {
+        script {
+
+            // Keep these tags
+            def keepTags = ["latest", "${env.IMAGE_TAG}", "${env.IMAGE_TAG - 1}", "${env.IMAGE_TAG - 2}"]
+            echo "Keeping remote tags: ${keepTags.join(', ')}"
+
+            withCredentials([usernamePassword(
+                credentialsId: 'dockerhub-creds', 
+                usernameVariable: 'DH_USER', 
+                passwordVariable: 'DH_TOKEN'
+            )]) {
+
+                // Get all tags from Docker Hub
+                def response = sh(
+                    script: """
+                        curl -s -u "$DH_USER:$DH_TOKEN" \
+                        "https://hub.docker.com/v2/repositories/aparnaakhilesh/python-cicd-app/tags/?page_size=100"
+                    """,
+                    returnStdout: true
+                ).trim()
+
+                def json = readJSON text: response
+                def allTags = json.results*.name
+
+                // Determine which tags to delete
+                def deleteTags = allTags.findAll { !(it in keepTags) }
+
+                deleteTags.each { tag ->
+                    echo "Deleting remote tag from Docker Hub: ${tag}"
+
+                    // Fetch the digest for that tag
+                    def tagInfo = sh(
+                        script: """
+                            curl -s -u "$DH_USER:$DH_TOKEN" \
+                            "https://hub.docker.com/v2/repositories/aparnaakhilesh/python-cicd-app/tags/${tag}/"
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    def tagJson = readJSON text: tagInfo
+                    def digest = tagJson.images[0]?.digest
+
+                    if (!digest) {
+                        echo "Could not retrieve digest for tag: ${tag}, skipping"
+                        return
+                    }
+
+                    // Delete via digest
+                    sh """
+                        curl -s -X DELETE -u "$DH_USER:$DH_TOKEN" \
+                        "https://hub.docker.com/v2/repositories/aparnaakhilesh/python-cicd-app/tags/${digest}/"
+                    """
+
+                    echo "Deleted: ${tag}"
+                }
+            }
+        }
+    }
+}
 
         /* ---------------------------------------------------
            LOCAL CLEANUP (docker engine)
