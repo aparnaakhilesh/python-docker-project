@@ -42,6 +42,44 @@ pipeline {
                 """
             }
         }
+        stage("Cleanup old images and containers") {
+    steps {
+        script {
+
+            def KEEP1 = BUILD_NUMBER.toInteger()
+            def KEEP2 = KEEP1 - 1
+            def KEEP3 = KEEP1 - 2
+
+            echo "Keeping builds: ${KEEP1}, ${KEEP2}, ${KEEP3}"
+
+            // Read image tags
+            def allTags = sh(
+                script: "docker images ${DOCKERHUB_USER}/${IMAGE_NAME} --format '{{.Tag}}'",
+                returnStdout: true
+            ).trim().split("\n")
+
+            for (tag in allTags) {
+
+                // KEEP only last 3 builds
+                if (tag != KEEP1.toString() &&
+                    tag != KEEP2.toString() &&
+                    tag != KEEP3.toString()) {
+
+                    echo "Deleting old build tag: ${tag}"
+
+                    // Stop container using this image
+                    sh """
+                    docker ps -a --filter ancestor=${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} -q | xargs -r docker stop
+                    docker ps -a --filter ancestor=${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} -q | xargs -r docker rm
+                    """
+
+                    // Delete image
+                    sh "docker rmi -f ${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} || true"
+                }
+            }
+        }
+    }
+}
 
         stage("Run Container") {
             steps {
