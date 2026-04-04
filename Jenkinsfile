@@ -16,12 +16,19 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    // Increment image tag based on existing tags (or fallback)
-                    def lastTag = sh(
-                        script: "curl -s https://hub.docker.com/v2/repositories/${IMAGE_NAME}/tags/?page_size=1 | jq -r '.results[0].name'",
+
+                    // Fetch last tag WITHOUT jq
+                    def response = sh(
+                        script: """
+                            curl -s "https://hub.docker.com/v2/repositories/${IMAGE_NAME}/tags/?page_size=1"
+                        """,
                         returnStdout: true
                     ).trim()
 
+                    def json = readJSON text: response
+                    def lastTag = json?.results ? json.results[0].name : "0"
+
+                    // Increment tag
                     env.IMAGE_TAG = (lastTag.isInteger() ? lastTag.toInteger() + 1 : 1).toString()
                     echo "Building new image with tag: ${env.IMAGE_TAG}"
 
@@ -69,8 +76,8 @@ pipeline {
                         passwordVariable: 'DH_TOKEN'
                     )]) {
 
-                        // Get list of tags from Docker Hub
-                        def response = sh(
+                        // Get tags
+                        def resp = sh(
                             script: """
                                 curl -s -u "$DH_USER:$DH_TOKEN" \
                                 "https://hub.docker.com/v2/repositories/${IMAGE_NAME}/tags/?page_size=100"
@@ -78,8 +85,8 @@ pipeline {
                             returnStdout: true
                         ).trim()
 
-                        def json = readJSON text: response
-                        def allTags = json.results*.name
+                        def respJson = readJSON text: resp
+                        def allTags = respJson.results*.name
 
                         def deleteTags = allTags.findAll { !(it in keepTags) }
 
@@ -87,7 +94,6 @@ pipeline {
 
                             echo "Deleting remote tag: ${tag}"
 
-                            // Get digest
                             def tagInfo = sh(
                                 script: """
                                     curl -s -u "$DH_USER:$DH_TOKEN" \
@@ -104,7 +110,6 @@ pipeline {
                                 return
                             }
 
-                            // Delete by digest
                             sh """
                                 curl -s -X DELETE -u "$DH_USER:$DH_TOKEN" \
                                 "https://hub.docker.com/v2/repositories/${IMAGE_NAME}/tags/${digest}/"
