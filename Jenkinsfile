@@ -37,13 +37,15 @@ pipeline {
             steps {
                 sh """
                 docker push $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER
+                docker tag  $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER $DOCKERHUB_USER/$IMAGE_NAME:latest
+                docker push $DOCKERHUB_USER/$IMAGE_NAME:latest
                 """
             }
         }
 
-        /* -------------------------------------------------------
-           DELETE OLD TAGS FROM DOCKER HUB (KEEP ONLY LAST 3)
-        ---------------------------------------------------------*/
+        /* ---------------------------------------------
+           REMOTE CLEANUP (Docker Hub): Keep latest + last 3
+        ----------------------------------------------*/
         stage("Cleanup Docker Hub old tags") {
             steps {
                 script {
@@ -51,13 +53,13 @@ pipeline {
                     def KEEP2 = KEEP1 - 1
                     def KEEP3 = KEEP1 - 2
 
-                    echo "Keeping remote tags: ${KEEP1}, ${KEEP2}, ${KEEP3}"
+                    echo "Keeping remote tags: latest, ${KEEP1}, ${KEEP2}, ${KEEP3}"
 
-                    // Read all tags via Docker Hub API
+                    // fetch tags from the new API location
                     def json = sh(
                         script: """
                         curl -s -u ${DOCKERHUB_USER}:${DOCKER_CREDS_PSW} \
-                        https://hub.docker.com/v2/repositories/${DOCKERHUB_USER}/${IMAGE_NAME}/tags/?page_size=100
+                        https://hub.docker.com/v2/namespaces/${DOCKERHUB_USER}/repositories/${IMAGE_NAME}/tags?page_size=100
                         """,
                         returnStdout: true
                     )
@@ -65,36 +67,36 @@ pipeline {
                     def tags = new groovy.json.JsonSlurper().parseText(json).results.collect { it.name }
 
                     for (tag in tags) {
-                        if (tag.isInteger()) {
-                            if (tag != KEEP1.toString() &&
-                                tag != KEEP2.toString() &&
-                                tag != KEEP3.toString()) {
 
-                                echo "Deleting remote tag: ${tag}"
+                        if (tag == "latest") continue
 
-                                sh """
-                                curl -s -X DELETE -u ${DOCKERHUB_USER}:${DOCKER_CREDS_PSW} \
-                                https://hub.docker.com/v2/repositories/${DOCKERHUB_USER}/${IMAGE_NAME}/tags/${tag}/
-                                """
-                            }
+                        if (tag != KEEP1.toString() &&
+                            tag != KEEP2.toString() &&
+                            tag != KEEP3.toString()) {
+
+                            echo "Deleting remote tag: ${tag}"
+
+                            sh """
+                            curl -s -X DELETE -u ${DOCKERHUB_USER}:${DOCKER_CREDS_PSW} \
+                            https://hub.docker.com/v2/namespaces/${DOCKERHUB_USER}/repositories/${IMAGE_NAME}/tags/${tag}/
+                            """
                         }
                     }
                 }
             }
         }
 
-        /* -------------------------------------------------------
-           DELETE OLD LOCAL DOCKER IMAGES (KEEP ONLY LAST 3)
-        ---------------------------------------------------------*/
+        /* ---------------------------------------------
+           LOCAL CLEANUP (same 4 tags)
+        ----------------------------------------------*/
         stage("Cleanup local images and containers") {
             steps {
                 script {
-
                     def KEEP1 = BUILD_NUMBER.toInteger()
                     def KEEP2 = KEEP1 - 1
                     def KEEP3 = KEEP1 - 2
 
-                    echo "Keeping local builds: ${KEEP1}, ${KEEP2}, ${KEEP3}"
+                    echo "Keeping local tags: latest, ${KEEP1}, ${KEEP2}, ${KEEP3}"
 
                     def allTags = sh(
                         script: "docker images ${DOCKERHUB_USER}/${IMAGE_NAME} --format '{{.Tag}}'",
@@ -103,11 +105,13 @@ pipeline {
 
                     for (tag in allTags) {
 
+                        if (tag == "latest") continue
+
                         if (tag != KEEP1.toString() &&
                             tag != KEEP2.toString() &&
                             tag != KEEP3.toString()) {
 
-                            echo "Deleting local tag: ${tag}"
+                            echo "Removing local tag: ${tag}"
 
                             sh """
                             docker ps -a --filter ancestor=${DOCKERHUB_USER}/${IMAGE_NAME}:${tag} -q | xargs -r docker stop
@@ -120,9 +124,6 @@ pipeline {
             }
         }
 
-        /* -------------------------------------------------------
-           RUN CONTAINER
-        ---------------------------------------------------------*/
         stage("Run Container") {
             steps {
                 sh """
